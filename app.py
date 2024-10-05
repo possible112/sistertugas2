@@ -5,7 +5,7 @@ from tkinter import ttk
 import threading
 import time
 
-# Global variable to hold metrics
+# Variabel global untuk menyimpan metrik
 metrics = {
     "Request-Response": {"count": 0, "total_time": 0},
     "Publish-Subscribe": {"count": 0, "total_time": 0},
@@ -13,156 +13,141 @@ metrics = {
     "RPC": {"count": 0, "total_time": 0},
 }
 
-# Function to log metrics
+# Fungsi untuk mencatat metrik
 def log_metrics(model, time_taken):
-    metrics[model]["count"] += 1
-    metrics[model]["total_time"] += time_taken
+    metrics[model]["count"] += 1  # Menambahkan jumlah eksekusi model tertentu
+    metrics[model]["total_time"] += time_taken  # Menambahkan waktu yang diperlukan ke total
+    display_metrics(output_box)  # Memperbarui metrik secara real-time setelah setiap peristiwa
 
-# Request-Response Model (Asynchronous)
+# Fungsi untuk menampilkan metrik
+def display_metrics(output_box):
+    output_box.insert(tk.END, "\n--- Metrik Real-Time ---\n", "info")  # Menyisipkan header di kotak output
+    for model, data in metrics.items():
+        avg_time = data["total_time"] / data["count"] if data["count"] > 0 else 0  # Menghitung rata-rata waktu
+        output_box.insert(tk.END, f"{model}: Jumlah = {data['count']}, Rata-Rata Waktu = {avg_time:.2f} detik\n", "info")  # Menampilkan metrik untuk setiap model
+    output_box.insert(tk.END, "\n", "info")  # Menambahkan baris baru untuk meningkatkan keterbacaan
+
+# Model Request-Response (Asynchronous)
 async def request_response_server(request_queue, response_queue, output_box, max_requests=3):
-    """
-    Server dalam model Request-Response.
-    Fungsi ini mendengarkan permintaan dari client, memprosesnya, dan mengirimkan tanggapan kembali.
-    Server mengambil request dari antrian, memprosesnya (simulasi delay), dan mengirimkan response.
-    """
-    while True:
-        # Memeriksa apakah ada request dari client
-        if not request_queue.empty():
-            request = await request_queue.get()
-            output_box.insert(tk.END, f"[Server] Received request: {request}\n", "server")
-            await asyncio.sleep(random.uniform(0.5, 2))  # Simulate processing delay
-            response = f"Response to {request}"
-            await response_queue.put(response)
-        await asyncio.sleep(0.1)  # Simulate server waiting for next request
-
+    while True:  # Berjalan terus-menerus untuk terus menangani permintaan
+        if not request_queue.empty():  # Memeriksa apakah ada permintaan dalam antrean
+            request = await request_queue.get()  # Mengambil permintaan berikutnya
+            output_box.insert(tk.END, f"[Server] Menerima permintaan: {request}\n", "server")  # Mencatat permintaan yang diterima
+            await asyncio.sleep(random.uniform(0.5, 2))  # Mensimulasikan penundaan pemrosesan
+            response = f"Respons untuk {request}"  # Menyiapkan respons
+            await response_queue.put(response)  # Mengirim respons kembali ke klien
+        await asyncio.sleep(0.1)  # Menunggu sejenak sebelum memeriksa antrean lagi
 
 async def request_response_client(request_queue, response_queue, output_box, max_requests=3):
-    """
-    Client dalam model Request-Response.
-    Fungsi ini mengirim permintaan ke server dan menerima tanggapan.
-    Client membuat request, mengirimkannya ke server, lalu menunggu response dari server.
-    """
-    request = "Client Request"
-    output_box.insert(tk.END, f"[Client] Sending: {request}\n", "client")
+    for i in range(max_requests):
+        request = f"Permintaan Klien {i + 1}"  # Membuat pesan permintaan baru
+        output_box.insert(tk.END, f"[Klien] Mengirim: {request}\n", "client")  # Mencatat permintaan yang dikirim
 
-    start_time = time.time()
-    await request_queue.put(request)  # Mengirim request ke server
-    response = await response_queue.get()  # Menunggu response dari server
-    end_time = time.time()
+        start_time = time.time()  # Mencatat waktu mulai permintaan
+        await request_queue.put(request)  # Mengirim permintaan ke server
 
-    elapsed_time = end_time - start_time
-    log_metrics("Request-Response", elapsed_time)
+        # Mensimulasikan kemungkinan timeout
+        try:
+            response = await asyncio.wait_for(response_queue.get(), timeout=3)  # Menunggu respons dengan timeout
+            end_time = time.time()  # Mencatat waktu akhir
+            elapsed_time = end_time - start_time  # Menghitung waktu yang berlalu
+            log_metrics("Request-Response", elapsed_time)  # Mencatat metrik untuk model ini
+            output_box.insert(tk.END, f"[Klien] Menerima: {response}\n", "client")  # Mencatat respons yang diterima
+            output_box.insert(tk.END, f"Waktu yang berlalu untuk permintaan-respons ini: {elapsed_time:.2f} detik\n", "info")  # Menampilkan waktu yang berlalu
+        except asyncio.TimeoutError:
+            output_box.insert(tk.END, f"[Klien] Permintaan {request} telah timeout!\n", "client")  # Menangani kasus timeout
 
-    output_box.insert(tk.END, f"[Client] Received: {response}\n", "client")
-    output_box.insert(tk.END, f"Elapsed time for this request-response: {elapsed_time:.2f} seconds\n", "info")
+# Model Publish-Subscribe (Asynchronous)
+async def dynamic_publisher(broker, topics, output_box):
+    for topic in topics:
+        for i in range(3):
+            message = f"Pesan {i + 1} ke topik: {topic}"  # Membuat pesan baru untuk diterbitkan
+            output_box.insert(tk.END, f"[Penerbit] Menerbitkan: '{message}' ke {topic}\n", "publisher")  # Mencatat pesan yang diterbitkan
+            start_time = time.time()  # Mencatat waktu mulai penerbitan
+            broker[topic] = message  # Menyimpan pesan di broker
+            await asyncio.sleep(random.uniform(0.5, 1))  # Mensimulasikan waktu antara penerbitan
+            end_time = time.time()  # Mencatat waktu akhir
+            log_metrics("Publish-Subscribe", end_time - start_time)  # Mencatat metrik untuk model ini
 
-
-# Publish-Subscribe Model (Asynchronous)
-async def publisher(broker, topic, output_box):
-    """
-    Publisher dalam model Publish-Subscribe.
-    Fungsi ini mempublikasikan pesan ke broker dalam topik tertentu.
-    Publisher mengirim pesan ke topik yang terdaftar dalam broker.
-    """
-    for i in range(5):  # Publish multiple messages
-        message = f"Message {i + 1} to topic: {topic}"
-        output_box.insert(tk.END, f"[Publisher] Publishing: '{message}'\n", "publisher")
-        start_time = time.time()  # Start timing
-        broker[topic] = message
-        await asyncio.sleep(random.uniform(0.5, 1))  # Simulate time between publishing
-        end_time = time.time()  # End timing
-        log_metrics("Publish-Subscribe", end_time - start_time)
-
-async def subscriber(broker, topic, output_box):
+async def dynamic_subscriber(broker, topics, output_box):
+    subscribed_topics = random.sample(topics, random.randint(1, len(topics)))  # Secara acak berlangganan ke beberapa topik
+    output_box.insert(tk.END, f"[Pelanggan] Berlangganan ke: {', '.join(subscribed_topics)}\n", "subscriber")  # Mencatat topik yang disubscribekan
     while True:
-        if topic in broker:
-            message = broker[topic]
-            output_box.insert(tk.END, f"[Subscriber] Received: '{message}' from topic: '{topic}'\n", "subscriber")
-            output_box.insert(tk.END, f"[Subscriber] Processing message: '{message}'...\n", "subscriber")
-            await asyncio.sleep(random.uniform(1, 3))  # Simulate variable processing times
-            output_box.insert(tk.END, f"[Subscriber] Finished processing message: '{message}'\n", "subscriber")
-            del broker[topic]  # Remove the message after processing
+        for topic in subscribed_topics:
+            if topic in broker:  # Memeriksa apakah ada pesan untuk topik yang disubscribekan
+                message = broker[topic]  # Mengambil pesan dari broker
+                output_box.insert(tk.END, f"[Pelanggan] Menerima: '{message}' dari topik: '{topic}'\n", "subscriber")  # Mencatat pesan yang diterima
+                await asyncio.sleep(random.uniform(1, 2))  # Mensimulasikan waktu pemrosesan yang bervariasi
+                output_box.insert(tk.END, f"[Pelanggan] Selesai memproses pesan: '{message}'\n", "subscriber")  # Mencatat penyelesaian pemrosesan
+                del broker[topic]  # Menghapus pesan setelah diproses
+        await asyncio.sleep(0.1)  # Menunggu sejenak sebelum memeriksa topik lagi
 
-# Message Passing Model
+# Model Message Passing
 async def message_passing_sender(queue, message, output_box):
-    """
-    Sender dalam model Message Passing.
-    Fungsi ini mengirim pesan secara langsung ke receiver melalui antrian.
-    Sender menempatkan pesan ke dalam antrian yang kemudian akan diambil oleh receiver.
-    """
-    output_box.insert(tk.END, f"[Sender] Mengirim pesan: '{message}'\n", "sender")
-    start_time = time.time()  # Start timing
-    await queue.put(message)
-    end_time = time.time()  # End timing
-    log_metrics("Message Passing", end_time - start_time)
+    if random.random() > 0.2:  # 80% kemungkinan pesan berhasil dikirim
+        output_box.insert(tk.END, f"[Pengirim] Mengirim pesan: '{message}'\n", "sender")  # Mencatat pesan yang dikirim
+        start_time = time.time()  # Mencatat waktu mulai pengiriman
+        await asyncio.sleep(random.uniform(0.5, 1.5))  # Mensimulasikan penundaan jaringan
+        await queue.put(message)  # Mengirim pesan ke antrean
+        end_time = time.time()  # Mencatat waktu akhir
+        log_metrics("Message Passing", end_time - start_time)  # Mencatat metrik untuk model ini
+    else:
+        output_box.insert(tk.END, f"[Pengirim] Pesan '{message}' hilang dalam perjalanan!\n", "sender")  # Menangani kasus kehilangan pesan
 
 async def message_passing_receiver(queue, output_box):
-    """
-    Receiver dalam model Message Passing.
-    Fungsi ini menerima pesan dari antrian yang dikirim oleh sender.
-    Receiver mengambil pesan dari antrian dan memprosesnya.
-    """
     while True:
-        message = await queue.get()
-        output_box.insert(tk.END, f"[Receiver] Mendapat pesan: '{message}'\n", "receiver")
-        await asyncio.sleep(random.uniform(0.5, 2))  # Simulate processing delay
+        if not queue.empty():  # Memeriksa apakah antrean tidak kosong
+            message = await queue.get()  # Mengambil pesan dari antrean
+            output_box.insert(tk.END, f"[Penerima] Menerima pesan: '{message}'\n", "receiver")  # Mencatat pesan yang diterima
+            await asyncio.sleep(random.uniform(0.5, 2))  # Mensimulasikan penundaan pemrosesan
+        await asyncio.sleep(0.1)  # Menghindari busy-waiting
 
-# Remote Procedure Call (RPC) Model
+# Model Remote Procedure Call (RPC)
 async def rpc_server(method_name, *args):
-    """
-    Server dalam model Remote Procedure Call (RPC).
-    Fungsi ini mengeksekusi metode yang dipanggil oleh client dan mengembalikan hasilnya.
-    Server menerima nama metode dan argumen dari client, lalu mengeksekusinya.
-    """
-    start_time = time.time()  # Start timing
-    output_box.insert(tk.END, f"[Server] Executing: {method_name} with args: {args}\n", "rpc_server")
-    await asyncio.sleep(random.uniform(1, 2))  # Simulate RPC execution time
-    end_time = time.time()  # End timing
-    log_metrics("RPC", end_time - start_time)
-    return f"Result of {method_name}"
+    start_time = time.time()  # Memulai penghitungan waktu
+    output_box.insert(tk.END, f"[Server] Menjalankan: {method_name} dengan argumen: {args}\n", "rpc_server")  # Mencatat RPC yang dieksekusi
+    await asyncio.sleep(random.uniform(1, 2))  # Mensimulasikan waktu eksekusi RPC
+    end_time = time.time()  # Menghentikan penghitungan waktu
+    log_metrics("RPC", end_time - start_time)  # Mencatat metrik untuk RPC
+    return f"Hasil dari {method_name}"  # Mengembalikan hasil eksekusi
 
 async def rpc_client(method_name, output_box, *args):
-    """
-    Client dalam model Remote Procedure Call (RPC).
-    Fungsi ini memanggil metode di server dan menerima hasil eksekusi.
-    Client meminta server untuk mengeksekusi fungsi tertentu dan menunggu hasil.
-    """
-    output_box.insert(tk.END, f"[Client] Calling RPC method: {method_name} with args: {args}\n", "client")
-    result = await rpc_server(method_name, *args)
-    output_box.insert(tk.END, f"[Client] Received result: {result}\n", "client")
+    retries = 3  # Jumlah maksimal percobaan
+    for attempt in range(retries):
+        try:
+            output_box.insert(tk.END, f"[Klien] Mencoba panggilan RPC {method_name}, percobaan {attempt + 1}/{retries}\n", "client")  # Mencatat upaya panggilan RPC
+            result = await asyncio.wait_for(rpc_server(method_name, *args), timeout=5)  # Memanggil RPC dengan batas waktu
+            output_box.insert(tk.END, f"[Klien] Mendapatkan hasil: {result}\n", "client")  # Mencatat hasil yang diterima
+            break  # Keluar dari loop jika berhasil
+        except asyncio.TimeoutError:
+            output_box.insert(tk.END, f"[Klien] Timeout saat memanggil {method_name}, percobaan berikutnya...\n", "client")  # Menangani timeout
 
-# Asinkronous
+
+# Asynchronous Simulation Execution
 def run_simulation(selected_model, output_box, message_input=None):
     asyncio.run(start_simulation(selected_model, output_box, message_input))
 
+
 async def start_simulation(selected_model, output_box, message_input=None):
     if selected_model == "Request-Response":
-        '''Membuat dua antrian: request_queue untuk mengirimkan request dari client ke server, dan response_queue untuk mengirimkan response dari server kembali ke client.
-        Fungsi asyncio.gather() digunakan untuk menjalankan server dan client secara bersamaan.  
-        Server mendengarkan permintaan dan client mengirimkan permintaan secara asynchronous.'''
         output_box.insert(tk.END, "Starting Request-Response Model...\n", "info")
         request_queue = asyncio.Queue()
         response_queue = asyncio.Queue()
-
-        # Jalankan server dan client secara bersamaan
         await asyncio.gather(
             request_response_server(request_queue, response_queue, output_box),
             request_response_client(request_queue, response_queue, output_box)
         )
 
     elif selected_model == "Publish-Subscribe":
-        '''Fungsi publisher dan subscriber dijalankan bersamaan dengan asyncio.gather(), di mana publisher akan mempublikasikan pesan ke topik yang ditentukan, 
-        dan subscriber akan mendengarkan pesan dari topik tersebut melalui broker.'''
         output_box.insert(tk.END, "Starting Publish-Subscribe Model...\n", "info")
         broker = {}
+        topics = ["topic1", "topic2", "topic3"]
         await asyncio.gather(
-            publisher(broker, "topic1", output_box),
-            subscriber(broker, "topic1", output_box)
+            dynamic_publisher(broker, topics, output_box),
+            dynamic_subscriber(broker, topics, output_box)
         )
 
     elif selected_model == "Message Passing":
-        '''Fungsi message_passing_sender mengirim pesan (dalam hal ini message_input yang dimasukkan oleh pengguna), 
-        dan message_passing_receiver menerima pesan dari antrian tersebut dan menampilkannya di GUI.'''
         output_box.insert(tk.END, "Starting Message Passing Model...\n", "info")
         queue = asyncio.Queue()
         await asyncio.gather(
@@ -171,19 +156,9 @@ async def start_simulation(selected_model, output_box, message_input=None):
         )
 
     elif selected_model == "RPC":
-        '''Pada model RPC ini, client akan memanggil sebuah metode remote di server, dalam hal ini fungsi compute_sum dengan argumen 5 dan 10.
-        Fungsi rpc_client akan menampilkan proses RPC, mengirim request ke server, menunggu hasil, dan menampilkannya di output_box.'''
         output_box.insert(tk.END, "Starting RPC Model...\n", "info")
         await rpc_client("compute_sum", output_box, 5, 10)
 
-    display_metrics(output_box)
-
-# Function to display metrics
-def display_metrics(output_box):
-    output_box.insert(tk.END, "\n--- Metrics Comparison ---\n", "info")
-    for model, data in metrics.items():
-        avg_time = data["total_time"] / data["count"] if data["count"] > 0 else 0
-        output_box.insert(tk.END, f"{model}: Count = {data['count']}, Avg Time = {avg_time:.2f} seconds\n", "info")
 
 # Function to start the simulation in a new thread
 def start_simulation_thread():
@@ -201,6 +176,7 @@ def update_ui(event):
     else:
         message_label.pack_forget()
         message_entry.pack_forget()
+
 
 # Tkinter GUI setup
 def run_tkinter():
